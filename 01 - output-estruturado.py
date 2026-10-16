@@ -2,23 +2,23 @@ import os
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from pydantic import BaseModel
 
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")
 
-response = client.responses.create(
+
+class CalendarEvent(BaseModel):
+    name: str
+    date: str
+    participants: list[str]
+
+response = client.responses.parse(
     model=os.getenv("OPENAI_MODEL"),
-    input="""Extraia informações do evento: Daniel e Alberto vão gravar uma aula na terça-feira.
-    EXEMPLO DA FORMATAÇÃO: {
-        "formato_saida": {
-            "pessoas": ["..."],
-            "acao": "...",
-            "tipo_evento": "...",
-            "data": "..."
-        }
-    }
-    """
+    input="""Daniel e Alberto vão gravar uma aula na terça-feira.""",
+    instructions="Extraia informações do evento",
+    text_format=CalendarEvent
 )
 
 print(response.output_text)
