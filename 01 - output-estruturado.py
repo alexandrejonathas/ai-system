@@ -22,3 +22,7 @@ response = client.responses.parse(
 )
 
 print(response.output_text)
+
+event = response.output_parsed
+
+print(event.model_dump_json(indent=2))
