@@ -1,6 +1,7 @@
 import json
 import os
 
+import requests
 import yfinance as yf
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -11,38 +12,31 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url=os.getenv("GROQ_API_URL"))
 
 
-def get_stock(ticker: str):
-    
-    stock = yf.Ticker(ticker)
-    info = stock.info
-    
-    output = {
-        "ticker": ticker,
-        "company_name": info.get("shortName", ticker),
-        "current_price": info.get("currentPrice", 0)
-    }
-    
-    return json.dumps(output)
+def search_kb(query: str):
+    response = requests.post(
+        "http://localhost:8000/ai/search", json={"query": query, "limit": 3}
+    )
+    return response.json()
 
 tools = [
     {
         "type": "function",
-        "name": "get_stock",
-        "description": "Retorna informações básicas de uma ação.",
+        "name": "search_kb",
+        "description": "Busca informações na base de conhecimento para responder perguntas.",
         "parameters": {
             "type": "object",
             "properties": {
-                "ticker": {
+                "query": {
                     "type": "string",
-                    "description": "Símbolo da ação (ex: AAPL, NVDA)"
+                    "description": "A pergunta do usuario"
                 }
             },
-            "required": ["ticker"]
-        }
+            "required": ["query"]
+        }        
     }
 ]
 
-input_list = [{"role": "user", "content": "Qual o preço da ação da Apple?"}]
+input_list = [{"role": "user", "content": "Quais são os principais riscos financeiros da apple?"}]
 
 response = client.responses.create(
     model=os.getenv("GROQ_MODEL"),
@@ -56,12 +50,15 @@ for item in response.output:
 
     if item.type == "function_call":
         args = json.loads(item.arguments)
-        result = get_stock(**args)
+        result = search_kb(**args)
+        
+        text = [r["text"] for r in result["results"]]
+        
         input_list.append(
             {
                 "type": "function_call_output",
                 "call_id": item.call_id,
-                "output": result
+                "output": json.dumps({"results": text}, ensure_ascii=False)
             }
         )
         
