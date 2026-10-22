@@ -1,73 +1,80 @@
-import json
 import os
+from datetime import datetime
+from typing import Optional
 
-import requests
-import yfinance as yf
 from dotenv import load_dotenv
 from openai import OpenAI
-from pydantic import BaseModel
+
+from models.evento_model import ConfirmacaoEvento, DetalhesEvento, ExtracaoEvento
 
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url=os.getenv("GROQ_API_URL"))
 
-
-def search_kb(query: str):
-    response = requests.post(
-        "http://localhost:8000/ai/search", json={"query": query, "limit": 3}
+def extrair_informacao_evento(entrada_usuario: str):
+    
+    hoje = datetime.now()
+    contexto_data = f"Hoje é {hoje.strftime('%A, %d de %B de %Y')}"
+    
+    response = client.responses.parse(
+        model=os.getenv("GROQ_MODEL"),
+        input=f"{contexto_data} analise se o texto descreve um evento de calendario.",
+        instructions=f"Extraia informações sobre um possível evento deste texto: '{entrada_usuario}'",
+        text_format=ExtracaoEvento
     )
-    return response.json()
 
-tools = [
-    {
-        "type": "function",
-        "name": "search_kb",
-        "description": "Busca informações na base de conhecimento para responder perguntas.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "A pergunta do usuario"
-                }
-            },
-            "required": ["query"]
-        }        
-    }
-]
+    return response.output_parsed
 
-input_list = [{"role": "user", "content": "Quais são os principais riscos financeiros da apple?"}]
 
-response = client.responses.create(
-    model=os.getenv("GROQ_MODEL"),
-    tools=tools,
-    input=input_list,
-)
+def analisar_detalhes_evento(descricao: str) -> DetalhesEvento:
+    
+    hoje = datetime.now()
+    contexto_data = f"Hoje é {hoje.strftime('%A, %d de %B de %Y')}"
+    
+    response = client.responses.parse(
+        model=os.getenv("GROQ_MODEL"),
+        input=f"""{contexto_data} extraia informações detalhadas do evento. 
+        Quando as datas fizerem referência a 'próxima terça-feira' ou datas relativas similares, 
+        use a data atual como referencia.""",
+        instructions=f"Extraia detalhes estruturados deste texto de evento: '{descricao}'",
+        text_format=DetalhesEvento
+    )
 
-input_list.extend(response.output)
+    return response.output_parsed
 
-for item in response.output:
 
-    if item.type == "function_call":
-        args = json.loads(item.arguments)
-        result = search_kb(**args)
-        
-        text = [r["text"] for r in result["results"]]
-        
-        input_list.append(
-            {
-                "type": "function_call_output",
-                "call_id": item.call_id,
-                "output": json.dumps({"results": text}, ensure_ascii=False)
-            }
-        )
-        
+def gerar_confirmacao(detalhes_evento: DetalhesEvento) -> Optional[ConfirmacaoEvento]:
+    
+    response = client.responses.parse(
+        model=os.getenv("GROQ_MODEL"),
+        input="Gere uma mensagem de confirmação natural para o evento. Assine a mensagem com seu nome: Skynet.",
+        instructions=f"Crie uma notificação para este evento: '{detalhes_evento.model_dump()}'",
+        text_format=ConfirmacaoEvento
+    )
 
-final_response = client.responses.create(
-    model=os.getenv("GROQ_MODEL"),
-    instructions="Responda com uma análise baseada nos dados retornados pela função.",
-    input=input_list,
-    tools=tools
-)
+    return response.output_parsed
 
-print(final_response.output_text)
+
+def processar_solicitacao_calendário(entrada_usuario: str) -> Optional[ConfirmacaoEvento]:
+    extracao_inicial = extrair_informacao_evento(entrada_usuario)
+    
+    if (
+        not extracao_inicial.eh_evento_calendario
+        or extracao_inicial.pontuacao_confianca < 0.7
+    ):
+        return None
+    
+    detalhes_evento = analisar_detalhes_evento(extracao_inicial)
+    confirmacao = gerar_confirmacao(detalhes_evento)
+    
+    return confirmacao
+    
+
+entrada_usuario = """Vamos fazer uma trasmição ao vivo na 
+próxima segunda-feira às 20h com Daniel e Alberto para apresentar
+o lançamento do novo curso, deve durar umas 2 horas.
+"""
+
+evento = processar_solicitacao_calendário(entrada_usuario)
+
+print(evento.mensagem_confirmacao)
