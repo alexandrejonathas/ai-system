@@ -77,4 +77,8 @@ o lançamento do novo curso, deve durar umas 2 horas.
 
 evento = processar_solicitacao_calendário(entrada_usuario)
 
-print(evento.mensagem_confirmacao)
+if evento:
+    print(evento.mensagem_confirmacao)
+    
+    if evento.link_calendario:
+        print(f"Link do evento: {evento.link_calendario}")
