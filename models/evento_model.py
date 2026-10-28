@@ -70,3 +70,19 @@ class RespostaCalendario(BaseModel):
     link_calendario: Optional[str] = Field(
         description="Link do calendário gerado se aplicável"
     )
+    
+class ValidacaoCalendario(BaseModel):
+    eh_solicitacao_calendario: bool = Field(
+        description="Se a entrada parece segura"
+    )
+    pontuacao_confianca: float = Field(
+        description="Pontuação de confiança entre 0 e 1"
+    )
+    
+class VerificacaoSeguranca(BaseModel):
+    eh_seguro: bool = Field(
+        description="Se a entrada parece segura"
+    )
+    sinalizadores_risco: list[str] = Field(
+        description="Lista de possiveis preocupações de segurança"
+    )
